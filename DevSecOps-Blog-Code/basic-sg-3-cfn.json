@@ -3,7 +3,7 @@
   "Description": "AWS CloudFormation Sample Template Continuous Delievery: This template builds an AWS CodePipeline pipeline that implements a continuous delivery release process for AWS CloudFormation stacks. Submit a CloudFormation source artifact to an Amazon S3 location before building the pipeline. The pipeline uses the artifact to automatically create stacks and change sets. **WARNING** This template creates an Amazon EC2 instance. You will be billed for the AWS resources used when you create a stack using this template.\n",
   "Parameters": {
     "PipelineName": {
-	  "Default": "DemoPipeline2",
+    "Default": "DemoPipeline2",
       "Description": "A name for pipeline",
       "Type": "String"
     },
@@ -30,7 +30,7 @@
       "Default": "codepipe-single-sg/single_security_group_one_cidr_ingress.json",
       "Description": "The file path of the  template",
       "Type": "String"
-    },	
+    },  
     "TestStackName": {
       "Default": "Test-SG",
       "Description": "A name for the test  stack",
@@ -83,7 +83,7 @@
             "TestStackName",
             "TemplateFileName",
             "TestStackConfig",
-			"TemplateFilePath"
+      "TemplateFilePath"
           ]
         },
         {
@@ -117,7 +117,7 @@
             "Protocol": "email"
           }
         ],
-		"TopicName" : {"Ref":"PipelineName"}
+    "TopicName" : {"Ref":"PipelineName"}
       }
     },
     "CodePipelineLambdaRole":{
@@ -141,8 +141,8 @@
         },
         "Path":"/"
       }
-    },	
-	"LambdaCodePipelineExecutionPolicy":{
+    },
+  "LambdaCodePipelineExecutionPolicy":{
       "DependsOn":[
         "CodePipelineLambdaRole"
       ],
@@ -171,9 +171,9 @@
               "Action":[
                 "codepipeline:PutJobSuccessResult",
                 "codepipeline:PutJobFailureResult",
-				"s3:*",
-				"ec2:*",
-				"cloudformation:*"
+        "s3:*",
+        "ec2:*",
+        "cloudformation:*"
               ],
               "Resource":[
                 "*"
@@ -196,11 +196,11 @@
               "Resource":[
                 "*"
               ]
-            }				
+            }
           ]
         }
       }
-    },	
+    },
     "CFNValidateLambda":{
       "Type":"AWS::Lambda::Function",
       "DependsOn":[
@@ -220,7 +220,7 @@
         "Handler":"cfn_validate_lambda.lambda_handler",
         "Runtime":"python2.7"
       }
-    },	
+    },
     "TestStackValidationLambda":{
       "Type":"AWS::Lambda::Function",
       "DependsOn":[
@@ -247,9 +247,9 @@
        "AttributeDefinitions" : [
           {
             "AttributeName" : "rule",
-            "AttributeType" : "S"   
+            "AttributeType" : "S"  
           }
-        ],	  
+        ],   
         "KeySchema" : [
           {
             "AttributeName" : "rule",
@@ -262,7 +262,7 @@
         },
         "TableName" : "lab3DDBRules"
       }
-    },	
+    },  
     "CFNRole": {
       "Type": "AWS::IAM::Role",
       "Properties": {
@@ -291,11 +291,12 @@
               "Statement": [
                 {
                   "Action": [
-                    "ec2:*"
+                    "ec2:*",
+                    "s3:*"
                   ],
                   "Effect": "Allow",
                   "Resource": "*"
-                }				
+                }
               ]
             }
           }
@@ -331,6 +332,7 @@
                 {
                   "Action": [
                     "s3:*",
+                    "ec2:*",
                     "cloudformation:CreateStack",
                     "cloudformation:DescribeStacks",
                     "cloudformation:DeleteStack",
@@ -342,7 +344,7 @@
                     "cloudformation:SetStackPolicy",
                     "iam:PassRole",
                     "sns:Publish",
-					"lambda:*"
+                    "lambda:*"
                   ],
                   "Effect": "Allow",
                   "Resource": "*"
@@ -352,7 +354,7 @@
           }
         ]
       }
-    },	
+    },
     "Pipeline": {
       "Type": "AWS::CodePipeline::Pipeline",
       "Properties": {
@@ -368,7 +370,7 @@
             "Name": "Commit",
             "Actions": [
               {
-				"InputArtifacts": [],
+        "InputArtifacts": [],
                 "Name": "TemplateSource",
                 "ActionTypeId": {
                   "Category": "Source",
@@ -403,7 +405,7 @@
                 },
                 "Configuration": {
                   "FunctionName": {"Ref":"CFNValidateLambda"},
-				  "UserParameters": {"Fn::Sub": "{\"input\": \"TemplateSource\", \"file\": \"${TemplateFilePath}\",\"output\": \"${S3Bucket}\"}"}
+          "UserParameters": {"Fn::Sub": "{\"input\": \"TemplateSource\", \"file\": \"${TemplateFilePath}\",\"output\": \"${S3Bucket}\"}"}
                 },
                 "OutputArtifacts": [{"Name": "TemplateSource2"}],
                 "RunOrder": "1"
@@ -422,7 +424,7 @@
                   "Provider": "CloudFormation",
                   "Version": "1"
                 },
-				"OutputArtifacts": [],
+            "OutputArtifacts": [ {"Name" : "StackOutput"}],
                 "Configuration": {
                   "ActionMode": "REPLACE_ON_FAILURE",
                   "RoleArn": {"Fn::GetAtt":["CFNRole","Arn"]},
@@ -432,24 +434,24 @@
                 },
                 "RunOrder": "1"
               },
-			  {
-				"InputArtifacts": [{
-					"Name": "TemplateSource"
-			    }],
-				"Name": "StackValidation_Test",
-				"ActionTypeId": {
-					"Category": "Invoke",
-					"Owner": "AWS",
-					"Version": "1",
-					"Provider": "Lambda"
-				},
-				"OutputArtifacts": [],
+        {
+        "InputArtifacts": [{
+          "Name": "TemplateSource"
+          }, {"Name": "StackOutput"}],
+        "Name": "StackValidation_Test",
+        "ActionTypeId": {
+          "Category": "Invoke",
+          "Owner": "AWS",
+          "Version": "1",
+          "Provider": "Lambda"
+        },
+        "OutputArtifacts": [],
                 "Configuration": {
                   "FunctionName": {"Ref":"TestStackValidationLambda"},
-				  "UserParameters": {"Ref":"TestStackName"}
+          "UserParameters": {"Ref":"TestStackName"}
                 },
-					"RunOrder": "2"
-			  },			  
+          "RunOrder": "2"
+        },
               {
                 "Name": "ApproveTestStack",
                 "ActionTypeId": {
@@ -493,17 +495,17 @@
                   "Provider": "CloudFormation",
                   "Version": "1"
                 },
-				"OutputArtifacts": [],
+        "OutputArtifacts": [],
                 "Configuration": {
                   "ActionMode": "CHANGE_SET_REPLACE",
                   "RoleArn": {"Fn::GetAtt":["CFNRole","Arn"]},
                   "StackName": {"Ref":"ProdStackName"},
-				  "ChangeSetName": {"Ref" : "ChangeSetName" },
+          "ChangeSetName": {"Ref" : "ChangeSetName" },
                   "TemplateConfiguration": {"Fn::Sub": "TemplateSource::${ProdStackConfig}"},
                   "TemplatePath": {"Fn::Sub": "TemplateSource::${TemplateFilePath}"}
                 },
                 "RunOrder": "1"
-              },			  
+              },        
               {
                 "Name": "ExecuteChangeSet",
                 "ActionTypeId": {
@@ -515,13 +517,13 @@
                 "Configuration": {
                   "ActionMode": "CHANGE_SET_EXECUTE",
                   "RoleArn": {"Fn::GetAtt":["CFNRole","Arn"]},
-				  "ChangeSetName": {"Ref" : "ChangeSetName" },
+          "ChangeSetName": {"Ref" : "ChangeSetName" },
                   "StackName": {"Ref" : "ProdStackName" }
                 },
                 "RunOrder": "2"
               }
             ]
-          }			  
+          }       
         ]
       }
     }

@@ -18,11 +18,48 @@
           "ToPort": 22,
           "IpProtocol": "tcp"
         },
-		"Tags": [
-			{"Key": "Name", "Value": "demo1"},
-			{"Key": "LOB", "Value": "Finance"}
-		],
+  		"Tags": [
+  			{"Key": "Name", "Value": "demo1"},
+  			{"Key": "LOB", "Value": "Finance"}
+  		],
         "VpcId" : { "Ref" : "VPCName" }}
+      },
+    "finvolume" : {
+      "Type" : "AWS::EC2::Volume",
+      "Properties" : {
+        "Size" : "8",
+        "Encrypted" : "true",
+        "AvailabilityZone" : "ap-southeast-2a",
+        "Tags" : [ 
+          {"Key": "Name", "Value": "demo1"},
+          {"Key": "LOB", "Value": "Finance"}
+        ]
       }
+    },
+    "finbucket": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {
+        "Tags" : [ 
+          {"Key": "Name", "Value": "demo1"},
+          {"Key": "LOB", "Value": "Finance"}
+        ]
+      }
+    }
+  },
+  "Outputs" : {
+    "finvolume" : {
+      "Description" : "Volume Created by this Cloudformation Script",
+      "Value" : { "Ref" : "finvolume" },
+      "Export" : {
+        "Name" : "finvolume"
+      }
+    },
+    "finbucket" : {
+      "Description" : "S3 Bucket financial team created",
+      "Value" : { "Ref" : "finbucket" },
+      "Export" : {
+        "Name" : "fins3bucket"
+      }
+    }
   }
-  }
+}
