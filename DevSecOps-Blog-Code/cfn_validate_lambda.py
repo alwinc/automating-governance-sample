@@ -211,6 +211,7 @@ def get_rules():
     rules = dict()
     sgRules = []
     ec2Rules = []
+    volRules = []
 
     for n in range(len(response['Items'])):
         rule = client.get_item(
@@ -224,8 +225,12 @@ def get_rules():
             sgRules.append(rule)
         elif rule['category']['S'] == "EC2Instance":
             ec2Rules.append(rule)
+        elif rule['category']['S'] == "Volume":
+            volRules.append(rule)
+
     rules['sgRules'] = sgRules
     rules['ec2Rules'] = ec2Rules
+    rules['volRules'] = volRules
     return rules
 
 
@@ -276,6 +281,17 @@ def add_rules(logTable):
             'active' : {'S': "N"}
         }
     )
+    client.put_item(
+        TableName=logTable,
+        Item={
+            'rule' : {'S': "VolumesNotEncrypted"},
+            'category' : {'S': "Volume"},
+            'ruletype' : {'S': "regex"},
+            'ruledata' : {'S': "^.*Encrypted.?\s*:\s*u?.?false"},
+            'riskvalue' : {'N': "90"},
+            'active' : {'S': "Y"}
+        }
+    )
 
 
 def evaluate_template(rules, template):
@@ -284,6 +300,7 @@ def evaluate_template(rules, template):
     # Extract Security Group Resources
     sgResources = []
     ec2Resources = []
+    volumeResources = []
     failedRules = []
     jsonTemplate = json.loads(template)
     print(json.dumps(jsonTemplate, sort_keys=True, indent=4, separators=(',', ': ')))
@@ -293,6 +310,8 @@ def evaluate_template(rules, template):
             sgResources.append(jsonTemplate['Resources'][key])
         elif "EC2::Instance" in jsonTemplate['Resources'][key]['Type']:
             ec2Resources.append(jsonTemplate['Resources'][key])
+        elif "EC2::Volume" in jsonTemplate['Resources'][key]['Type']:
+            volumeResources.append(jsonTemplate['Resources'][key])
 
     for n in range(len(sgResources)):
         for m in range(len(rules['sgRules'])):
@@ -314,6 +333,17 @@ def evaluate_template(rules, template):
                     print("Matched rule: " + str(rules['ec2Rules'][m]['rule']['S']))
                     print("Resource: " + str(ec2Resources[n]))
                     print("Riskvalue: " + rules['ec2Rules'][m]['riskvalue']['N'])
+                    print("")
+
+    for n in range(len(volumeResources)):
+        for m in range(len(rules['volRules'])):
+            if rules['volRules'][m]['active']['S'] == "Y":
+                if re.match(rules['volRules'][m]['ruledata']['S'], str(volumeResources[n])):
+                    risk = risk + int(rules['volRules'][m]['riskvalue']['N'])
+                    failedRules.append(str(rules['volRules'][m]['rule']['S']))
+                    print("Matched rule: " + str(rules['volRules'][m]['rule']['S']))
+                    print("Resource: " + str(volumeResources[n]))
+                    print("Riskvalue: " + rules['volRules'][m]['riskvalue']['N'])
                     print("")
     print("Risk value: " +str(risk))
     return risk, failedRules

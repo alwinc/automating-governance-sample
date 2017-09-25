@@ -155,6 +155,61 @@ def control_4_1_ensure_ssh_not_open_to_world(regions, stackName):
     return {'Result': result, 'failReason': failReason, 'Offenders': offenders, 'ScoredControl': scored,
             'Description': description, 'ControlId': control}
 
+# --- S3 Access control ---
+# 4.2 Ensure S3 bucket is not publicly accessible
+def control_4_2_no_global_s3(stackName):
+    """Summary
+    Returns:
+        TYPE: Description
+    """
+
+    # Getting the s3 bucket name first from cloudformation
+    cfn = boto3.client('cloudformation')
+    cfnResourceBucketInfo = cfn.describe_stack_resource(StackName=stackName,LogicalResourceId='finbucket')
+    s3BucketName = cfnResourceBucketInfo['StackResourceDetail']['PhysicalResourceId']
+
+    hasPassed = True
+    failReason = ""
+    offenders = []
+    control = "4.2"
+    description = "Ensure that there are no S3 elements exposed to the public"
+    scored = True
+    client = boto3.client('s3')
+
+    # First check bucket policy
+    try:
+        response = client.get_bucket_policy(Bucket=s3BucketName)
+        policyJson = json.loads(response['Policy'])
+        for statement in policyJson['Statement']:
+            print(statement)
+            if (statement['Principal'] and ('*' in statement['Principal'])) and (statement['Effect'] and ('Allow' in statement['Effect'])) and (statement['Action'] and ('*' in statement['Action'])):
+                hasPassed = False
+                failReason = 'Bucket [' + s3BucketName + '] has Allow policy for everyone'
+                offenders.append(s3BucketName)
+    except botocore.exceptions.ClientError as exp:
+        if 'NoSuchBucketPolicy' in str(exp):
+            # no policy is fine
+            hasPassed = True
+
+    if hasPassed:
+        # check secondary ACL properties
+        try:
+            aclResponse = client.get_bucket_acl(Bucket=s3BucketName)
+            for aGrant in aclResponse['Grants']:
+                # contains definitions for all users then it should be invalid
+                if (aGrant['Grantee']['Type'] == 'Group') and (aGrant['Grantee']['URI']) and ('groups/global/AllUsers' in aGrant['Grantee']['URI']):
+                    print ('Found information about Global All users. This is not permitted')
+                    hasPassed = False
+                    offenders.append(s3BucketName)
+                    failReason = s3BucketName + " contains ACL specifications for All Users"
+        except botocore.exceptions.ClientError as expAcl:
+            print('problems extracting ACL information')
+            hasPassed = False
+            offenders.append(s3BucketName)
+            failReason = s3BucketName + " cannot read ACL information. Please check permissions on this lambda script"
+
+    return {'Result': hasPassed, 'failReason': failReason, 'Offenders': offenders, 'ScoredControl': scored,
+            'Description': description, 'ControlId': control}
 
 def get_regions():
     region_response = EC2_CLIENT.describe_regions()
@@ -247,6 +302,11 @@ def lambda_handler(event, context):
     print('control_4_1_result: ' + str(control_4_1_result['Result']))
     control4.append(control_4_1_result)
 
+    # Running 4.2 control for s3 protection
+    control_4_2_result = control_4_2_no_global_s3(stackName)
+    print('control_4_2_result: ' + str(control_4_2_result['Result']))
+    control4.append(control_4_2_result)
+
     # Join results
     controls = []
     controls.append(control4)
@@ -254,11 +314,17 @@ def lambda_handler(event, context):
     # Build JSON structure for console output if enabled
     if SCRIPT_OUTPUT_JSON:
         json_output(controls)
-    if (control_4_1_result['Result']):
-        print("\n")
-        put_job_success(job_id, 'Job succesful, minimal or no risk detected.')
-    else:
-        print("\n")
-        if stack_exists(stackName):
-            delete_stack(stackName)
-        put_job_failure(job_id, 'Function exception: Found Security group SSH violation and deleted the stack. Check the logs ')
+
+    # iterate through controls for error checks
+    for control in controls:
+        for controlspec in control:
+            if controlspec['Result'] is False:
+                print("\n")
+                if stack_exists(stackName):
+                    delete_stack(stackName)
+                put_job_failure(job_id, controlspec['failReason'])
+                return
+    
+    # found nothing and is good to go
+    print("\n")
+    put_job_success(job_id, 'Job succesful, minimal or no risk detected.')
